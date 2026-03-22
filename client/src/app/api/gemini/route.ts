@@ -22,14 +22,10 @@ function getApiKeys(): string[] {
 
 const API_KEYS = getApiKeys();
 
-// Helper: sleep for given ms
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// Try generating content, cycling through API keys on 429 errors
+// Try generating content — one attempt per key, no retries (saves quota)
 async function generateWithFallback(
     systemPrompt: string,
     userPrompt: string,
-    maxRetries: number = 2,
 ): Promise<string> {
     const errors: string[] = [];
 
@@ -37,38 +33,30 @@ async function generateWithFallback(
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-        for (let attempt = 0; attempt <= maxRetries; attempt++) {
-            try {
-                const result = await model.generateContent([
-                    { text: systemPrompt },
-                    { text: userPrompt },
-                ]);
-                return result.response.text();
-            } catch (err: unknown) {
-                const msg = err instanceof Error ? err.message : String(err);
-                const is429 = msg.includes("429") || msg.includes("Too Many Requests") || msg.includes("quota");
+        try {
+            const result = await model.generateContent([
+                { text: systemPrompt },
+                { text: userPrompt },
+            ]);
+            return result.response.text();
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            const is429 = msg.includes("429") || msg.includes("Too Many Requests") || msg.includes("quota");
 
-                if (is429 && attempt < maxRetries) {
-                    // Wait before retrying with the same key
-                    await sleep(2000 * (attempt + 1));
-                    continue;
-                }
-
-                if (is429) {
-                    // This key is exhausted, try next key
-                    errors.push(`Key …${apiKey.slice(-6)}: rate limited`);
-                    break;
-                }
-
-                // Non-rate-limit error — throw immediately
-                throw err;
+            if (is429) {
+                // This key is rate limited — try next key
+                errors.push(`Key …${apiKey.slice(-6)}: rate limited`);
+                continue;
             }
+
+            // Non-rate-limit error — throw immediately
+            throw err;
         }
     }
 
     throw new Error(
         `All API keys exhausted (rate limited). Tried ${API_KEYS.length} key(s). ` +
-        `Please wait a minute and try again, or add more API keys to .env.local (GEMINI_API_KEY2, GEMINI_API_KEY3, etc.). ` +
+        `Please wait a minute and try again, or add more API keys to .env.local. ` +
         `Details: ${errors.join("; ")}`
     );
 }
