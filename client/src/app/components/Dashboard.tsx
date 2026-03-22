@@ -18,6 +18,7 @@ const categories: { id: QuizCategory; label: string; icon: string; desc: string;
 const quickActions: { icon: string; label: string; desc: string; page: PageType }[] = [
     { icon: "🗄️", label: "SQL Terminal", desc: "Practice SQL queries with AI-simulated database", page: "sql" },
     { icon: "🧩", label: "DSA Editor", desc: "Solve coding problems with built-in code editor", page: "dsa" },
+    { icon: "📄", label: "Resume AI", desc: "Tailor your resume for any job with Gemini AI", page: "resume" },
     { icon: "🤖", label: "AI Chat", desc: "Ask any interview question to PrepMaster AI", page: "chat" },
 ];
 
@@ -40,7 +41,7 @@ export default function Dashboard({ onStartQuiz, onNavigate }: { onStartQuiz: (c
             </div>
 
             {/* Quick Actions */}
-            <div className="animate-fade-in-up delay-200" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20, marginBottom: 48, position: "relative", zIndex: 1 }}>
+            <div className="animate-fade-in-up delay-200" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 20, marginBottom: 48, position: "relative", zIndex: 1 }}>
                 {quickActions.map((action) => (
                     <button key={action.page} onClick={() => onNavigate(action.page)} className="card" style={{
                         cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 16,

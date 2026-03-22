@@ -7,8 +7,9 @@ import QuizPage from "./components/QuizPage";
 import SQLTerminal from "./components/SQLTerminal";
 import DSAEditor from "./components/DSAEditor";
 import ChatAssistant from "./components/ChatAssistant";
+import ResumeOptimizer from "./components/ResumeOptimizer";
 
-export type PageType = "dashboard" | "quiz" | "sql" | "dsa" | "chat";
+export type PageType = "dashboard" | "quiz" | "sql" | "dsa" | "chat" | "resume";
 export type QuizCategory = "databases" | "dsa" | "system-design" | "javascript" | "python" | "react" | "nodejs" | "os" | "networking" | "general";
 
 export default function Home() {
@@ -28,6 +29,7 @@ export default function Home() {
         {currentPage === "quiz" && <QuizPage category={quizCategory} onBack={() => setCurrentPage("dashboard")} />}
         {currentPage === "sql" && <SQLTerminal />}
         {currentPage === "dsa" && <DSAEditor />}
+        {currentPage === "resume" && <ResumeOptimizer />}
         {currentPage === "chat" && <ChatAssistant />}
       </main>
     </div>

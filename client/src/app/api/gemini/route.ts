@@ -1,20 +1,88 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY1 || "");
+// Collect all available Gemini API keys for rotation
+function getApiKeys(): string[] {
+    const keys: string[] = [];
+    const seen = new Set<string>();
+    const envKeys = [
+        process.env.GEMINI_API_KEY,
+        process.env.GEMINI_API_KEY1,
+        process.env.GEMINI_API_KEY2,
+        process.env.GEMINI_API_KEY3,
+    ];
+    for (const k of envKeys) {
+        if (k && !seen.has(k)) {
+            seen.add(k);
+            keys.push(k);
+        }
+    }
+    return keys;
+}
+
+const API_KEYS = getApiKeys();
+
+// Helper: sleep for given ms
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Try generating content, cycling through API keys on 429 errors
+async function generateWithFallback(
+    systemPrompt: string,
+    userPrompt: string,
+    maxRetries: number = 2,
+): Promise<string> {
+    const errors: string[] = [];
+
+    for (const apiKey of API_KEYS) {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                const result = await model.generateContent([
+                    { text: systemPrompt },
+                    { text: userPrompt },
+                ]);
+                return result.response.text();
+            } catch (err: unknown) {
+                const msg = err instanceof Error ? err.message : String(err);
+                const is429 = msg.includes("429") || msg.includes("Too Many Requests") || msg.includes("quota");
+
+                if (is429 && attempt < maxRetries) {
+                    // Wait before retrying with the same key
+                    await sleep(2000 * (attempt + 1));
+                    continue;
+                }
+
+                if (is429) {
+                    // This key is exhausted, try next key
+                    errors.push(`Key …${apiKey.slice(-6)}: rate limited`);
+                    break;
+                }
+
+                // Non-rate-limit error — throw immediately
+                throw err;
+            }
+        }
+    }
+
+    throw new Error(
+        `All API keys exhausted (rate limited). Tried ${API_KEYS.length} key(s). ` +
+        `Please wait a minute and try again, or add more API keys to .env.local (GEMINI_API_KEY2, GEMINI_API_KEY3, etc.). ` +
+        `Details: ${errors.join("; ")}`
+    );
+}
 
 export async function POST(request: NextRequest) {
     try {
         const { prompt, type } = await request.json();
 
-        if (!process.env.GEMINI_API_KEY) {
+        if (API_KEYS.length === 0) {
             return NextResponse.json(
-                { error: "GEMINI_API_KEY is not configured. Please add it to your .env.local file." },
+                { error: "No Gemini API keys configured. Please add GEMINI_API_KEY to your .env.local file." },
                 { status: 500 }
             );
         }
-
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
         let systemPrompt = "";
 
@@ -132,6 +200,24 @@ export async function POST(request: NextRequest) {
         Use markdown formatting. Be constructive and encouraging.`;
                 break;
 
+            case "resume_optimize":
+                systemPrompt = `You are an expert ATS-optimized resume writer and career coach. Your task is to tailor the user's existing resume for a specific job role and job description.
+
+RULES:
+1. **Preserve the original resume's structure, formatting style, and section order exactly.** Do not add or remove sections.
+2. **Rewrite bullet points** to emphasize skills, keywords, and achievements that align with the job description.
+3. **Incorporate relevant keywords** from the job description naturally into the experience, skills, and summary sections.
+4. **Quantify achievements** where possible (metrics, percentages, numbers).
+5. **Adjust the professional summary / objective** to directly target the role.
+6. **Reorder skills** so the most relevant ones appear first.
+7. **Do NOT fabricate experience or skills** the candidate doesn't already have — only rephrase and emphasize existing content.
+8. **Output the full, ready-to-use resume text** — not a diff or a list of suggestions. The user should be able to copy-paste the output as their new resume.
+9. Use clear, professional language. Avoid buzzwords without substance.
+10. If the resume contains a "Skills" or "Technologies" section, make sure it mirrors the tech stack mentioned in the job description (only include skills the candidate actually listed).
+
+Return ONLY the optimized resume text, no commentary, no markdown code fences, no explanations before or after.`;
+                break;
+
             case "chat":
                 systemPrompt = `You are PrepAI, an expert interview preparation assistant. You help with:
         - Data Structures & Algorithms
@@ -147,13 +233,7 @@ export async function POST(request: NextRequest) {
                 systemPrompt = "You are a helpful interview preparation assistant.";
         }
 
-        const result = await model.generateContent([
-            { text: systemPrompt },
-            { text: prompt },
-        ]);
-
-        const response = result.response;
-        const text = response.text();
+        const text = await generateWithFallback(systemPrompt, prompt);
 
         return NextResponse.json({ result: text });
     } catch (error: unknown) {

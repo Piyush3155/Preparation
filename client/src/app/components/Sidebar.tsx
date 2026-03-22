@@ -7,6 +7,7 @@ const navItems: { id: PageType; label: string; icon: string }[] = [
     { id: "quiz", label: "Quiz Mode", icon: "📝" },
     { id: "sql", label: "SQL Terminal", icon: "🗄️" },
     { id: "dsa", label: "DSA Problems", icon: "🧩" },
+    { id: "resume", label: "Resume AI", icon: "📄" },
     { id: "chat", label: "AI Assistant", icon: "🤖" },
 ];
 
